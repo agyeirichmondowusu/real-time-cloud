@@ -1,0 +1,10 @@
+fastapi>=0.104.1
+uvicorn[standard]>=0.22.0
+httpx>=0.28.0
+numpy>=1.26.0
+opencv-python>=4.8.1.78
+pydantic>=2.7.0
+jinja2>=3.1.2
+aiofiles>=23.1.0
+tensorflow>=2.14.0
+pyinstaller>=5.15.0

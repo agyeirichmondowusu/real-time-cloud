@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Cloud Observation System</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Chart.js for Live Analytics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Google Fonts (Inter) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        slate: {
+                            50: '#f8fafc',
+                            100: '#f1f5f9',
+                            200: '#e2e8f0',
+                            300: '#cbd5e1',
+                            400: '#94a3b8',
+                            500: '#64748b',
+                            600: '#475569',
+                            700: '#334155',
+                            800: '#1e293b',
+                            900: '#0f172a',
+                        },
+                        brand: {
+                            blue: '#2563eb',
+                            cyan: '#06b6d4',
+                            green: '#10b981',
+                            orange: '#f97316',
+                        }
+                    },
+                    boxShadow: {
+                        'soft': '0 10px 30px -5px rgba(0, 0, 0, 0.04), 0 4px 12px -2px rgba(0, 0, 0, 0.025)',
+                        'soft-hover': '0 20px 40px -10px rgba(0, 0, 0, 0.08), 0 8px 16px -4px rgba(0, 0, 0, 0.04)',
+                        'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.05)',
+                    },
+                    borderRadius: {
+                        '2xl': '1.25rem', // 20px
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom Glassmorphism Styles */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+        }
+        
+        .glass-nav {
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+        }
+
+        /* Pulsing Dot Animation */
+        @keyframes pulse-dot {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+        .pulse-green {
+            animation: pulse-dot 2s infinite;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen flex flex-col selection:bg-brand-blue selection:text-white">
+
+    <!-- TOP HEADER -->
+    <header class="sticky top-0 z-40 glass-nav px-6 py-3.5 flex items-center justify-between transition-all duration-300">
+        <div class="flex items-center space-x-3">
+            <div class="p-2.5 bg-gradient-to-tr from-brand-blue to-brand-cyan text-white rounded-xl shadow-md shadow-blue-500/20">
+                <i data-lucide="cloud-sun" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-slate-900 text-lg leading-tight flex items-center gap-2">
+                    ESP32 Cloud Observation System
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-brand-blue font-semibold border border-blue-200">v2.4 Edge</span>
+                </h1>
+                <p class="text-xs text-slate-500">Real-Time Edge AI Cloud Segmentation and Classification</p>
+            </div>
+        </div>
+
+        <!-- Header Telemetry Metrics -->
+        <div class="hidden xl:flex items-center space-x-6 text-xs text-slate-600 border-x border-slate-200 px-6">
+            <div>
+                <span class="text-slate-400 block">Uptime</span>
+                <span class="font-semibold text-slate-700 font-mono" id="val-uptime">04h 12m 33s</span>
+            </div>
+            <div>
+                <span class="text-slate-400 block">System FPS</span>
+                <span class="font-semibold text-slate-700 font-mono"><span id="val-fps">14.8</span> FPS</span>
+            </div>
+            <div>
+                <span class="text-slate-400 block">UNet Inference</span>
+                <span class="font-semibold text-brand-blue font-mono"><span id="val-unet-latency">64</span> ms</span>
+            </div>
+            <div>
+                <span class="text-slate-400 block">MobileNet Inference</span>
+                <span class="font-semibold text-brand-cyan font-mono"><span id="val-mobilenet-latency">12</span> ms</span>
+            </div>
+            <div>
+                <span class="text-slate-400 block">ESP32 Latency</span>
+                <span class="font-semibold text-slate-700 font-mono"><span id="val-esp-latency">32</span> ms</span>
+            </div>
+        </div>
+
+        <!-- System Status Badges -->
+        <div class="flex items-center space-x-4">
+            <div class="flex items-center space-x-2 bg-emerald-50 text-emerald-700 border border-emerald-200/80 px-3 py-1.5 rounded-full text-xs font-semibold">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 pulse-green"></span>
+                <span>ONLINE</span>
+            </div>
+            <div class="text-right text-xs hidden sm:block">
+                <div class="font-semibold text-slate-700 font-mono" id="current-time">12:00:00 PM</div>
+                <div class="text-slate-400" id="current-date">UTC-0</div>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden">
+        
+        <!-- SIDE NAVIGATION -->
+        <aside id="sidebar" class="w-64 border-r border-slate-200 bg-white flex flex-col justify-between transition-all duration-300 z-30 shrink-0">
+            <div class="p-4 space-y-1">
+                <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-3 mb-2">Navigation</div>
+                
+                <a href="#" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl bg-brand-blue/10 text-brand-blue font-medium text-sm transition-colors">
+                    <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="#live-feed-section" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium text-sm transition-colors">
+                    <i data-lucide="video" class="w-4 h-4"></i>
+                    <span>Live Feed</span>
+                </a>
+                <a href="#unet-section" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium text-sm transition-colors">
+                    <i data-lucide="layers" class="w-4 h-4"></i>
+                    <span>UNet Analysis</span>
+                </a>
+                <a href="#classification-section" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium text-sm transition-colors">
+                    <i data-lucide="cpu" class="w-4 h-4"></i>
+                    <span>Classification</span>
+                </a>
+                <a href="#performance-section" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium text-sm transition-colors">
+                    <i data-lucide="activity" class="w-4 h-4"></i>
+                    <span>Performance</span>
+                </a>
+                <a href="#" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium text-sm transition-colors">
+                    <i data-lucide="file-text" class="w-4 h-4"></i>
+                    <span>System Logs</span>
+                </a>
+
+                <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-3 mt-6 mb-2">Controls</div>
+                <a href="#" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium text-sm transition-colors">
+                    <i data-lucide="settings" class="w-4 h-4"></i>
+                    <span>Settings</span>
+                </a>
+                <a href="#" class="flex items-center space-x-3 px-3 py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium text-sm transition-colors">
+                    <i data-lucide="info" class="w-4 h-4"></i>
+                    <span>About System</span>
+                </a>
+            </div>
+
+            <!-- Device Hardware Summary Card -->
+            <div class="p-4 m-4 bg-slate-50 border border-slate-200/80 rounded-2xl">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-semibold text-slate-700">ESP32-CAM Core</span>
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                </div>
+                <div class="space-y-1.5 text-[11px] text-slate-500">
+                    <div class="flex justify-between"><span>Wi-Fi Signal:</span><span class="font-medium text-slate-700" id="val-rssi">-64 dBm</span></div>
+                    <div class="flex justify-between"><span>Resolution:</span><span class="font-medium text-slate-700">800x600</span></div>
+                    <div class="flex justify-between"><span>Sensor Temp:</span><span class="font-medium text-slate-700" id="val-temp">38.4°C</span></div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- MAIN DASHBOARD CONTENT AREA -->
+        <main class="flex-1 overflow-y-auto p-6 space-y-6">
+            
+            <!-- ROW 1: PRIMARY VISION PIPELINE (60% Feed / 40% UNet) -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6" id="live-feed-section">
+                
+                <!-- Live ESP32 Feed (60%) -->
+                <div class="lg:col-span-7 glass-card rounded-2xl p-5 shadow-soft hover:shadow-soft-hover transition-all duration-300 flex flex-col">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center space-x-2">
+                            <span class="p-2 bg-blue-50 text-brand-blue rounded-lg">
+                                <i data-lucide="camera" class="w-4 h-4"></i>
+                            </span>
+                            <div>
+                                <h2 class="font-bold text-slate-800 text-base">Live Camera Stream</h2>
+                                <p class="text-xs text-slate-400">ESP32-CAM Hardware Feed</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <span class="px-2.5 py-1 rounded-md bg-red-500/10 text-red-600 font-bold text-[11px] tracking-wider flex items-center gap-1.5 border border-red-500/20">
+                                <span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span> LIVE
+                            </span>
+                            <span class="text-xs font-mono text-slate-400 bg-slate-100 px-2 py-1 rounded-md">800x600 @ 15fps</span>
+                        </div>
+                    </div>
+
+                    <!-- Video Container -->
+                    <div class="relative flex-1 bg-slate-900 rounded-xl overflow-hidden shadow-inner flex items-center justify-center min-h-[340px]">
+                        <img id="raw-stream" src="/video_feed/raw" alt="ESP32 Stream" class="w-full h-full object-cover">
+                        
+                        <!-- Video Overlay Badges -->
+                        <div class="absolute top-3 left-3 bg-slate-900/75 backdrop-blur-md px-3 py-1.5 rounded-lg text-white text-xs font-mono flex items-center space-x-2 border border-white/10">
+                            <i data-lucide="clock" class="w-3.5 h-3.5 text-brand-cyan"></i>
+                            <span id="video-timestamp">12:00:00.000</span>
+                        </div>
+                        <div class="absolute bottom-3 right-3 bg-slate-900/75 backdrop-blur-md px-3 py-1.5 rounded-lg text-white text-xs font-mono border border-white/10">
+                            LATENCY: <span class="text-emerald-400 font-bold" id="video-latency">34ms</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- UNet Segmentation View (40%) -->
+                <div class="lg:col-span-5 glass-card rounded-2xl p-5 shadow-soft hover:shadow-soft-hover transition-all duration-300 flex flex-col" id="unet-section">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center space-x-2">
+                            <span class="p-2 bg-cyan-50 text-brand-cyan rounded-lg">
+                                <i data-lucide="layers" class="w-4 h-4"></i>
+                            </span>
+                            <div>
+                                <h2 class="font-bold text-slate-800 text-base">UNet Mask Segmentation</h2>
+                                <p class="text-xs text-slate-400">Deep Learning Cloud Boundaries</p>
+                            </div>
+                        </div>
+                        <span class="text-xs font-semibold px-2.5 py-1 rounded-md bg-cyan-50 text-brand-cyan border border-cyan-200">
+                            Confidence: <span id="unet-confidence">98.4%</span>
+                        </span>
+                    </div>
+
+                    <!-- Mask Image Container -->
+                    <div class="relative flex-1 bg-slate-900 rounded-xl overflow-hidden shadow-inner flex items-center justify-center min-h-[220px] mb-4">
+                        <img id="unet-stream" src="/video_feed/unet" alt="UNet Predicted Mask" class="w-full h-full object-cover">
+                        <div class="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-md px-2.5 py-1 rounded-lg text-white text-[11px] font-mono border border-white/10">
+                            PREDICTED MASK
+                        </div>
+                    </div>
+
+                    <!-- Overlay Transparency Controls & Telemetry -->
+                    <div class="space-y-3">
+                        <div>
+                            <div class="flex justify-between text-xs font-medium text-slate-600 mb-1">
+                                <span>Mask Opacity Blend</span>
+                                <span id="opacity-val">80%</span>
+                            </div>
+                            <input type="range" min="0" max="100" value="80" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-brand-cyan" id="opacity-slider">
+                        </div>
+
+                        <!-- Pixel Diagnostics -->
+                        <div class="grid grid-cols-2 gap-3 pt-1">
+                            <div class="bg-slate-50 border border-slate-200/60 p-2.5 rounded-xl text-center">
+                                <span class="text-[11px] font-medium text-slate-400 block">Cloud Pixel Count</span>
+                                <span class="text-sm font-bold text-slate-700 font-mono" id="unet-cloud-pixels">196,608</span>
+                            </div>
+                            <div class="bg-slate-50 border border-slate-200/60 p-2.5 rounded-xl text-center">
+                                <span class="text-[11px] font-medium text-slate-400 block">Sky Pixel Count</span>
+                                <span class="text-sm font-bold text-slate-700 font-mono" id="unet-sky-pixels">65,536</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- ROW 2: THREE INTELLIGENT ANALYTICS CARDS -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6" id="classification-section">
+                
+                <!-- CARD 1: MOBILENET CLOUD CLASSIFICATION -->
+                <div id="mobilenet-card" class="glass-card rounded-2xl p-5 shadow-soft hover:shadow-soft-hover transition-all duration-300 border-l-4 border-l-brand-blue flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Cloud Classification</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-mono">MobileNetV2</span>
+                        </div>
+
+                        <!-- Weather Class Highlight -->
+                        <div class="flex items-center space-x-4 mb-4">
+                            <div id="class-icon-container" class="p-3.5 bg-blue-50 text-brand-blue rounded-2xl transition-all duration-300">
+                                <i data-lucide="sun-medium" id="class-icon" class="w-8 h-8"></i>
+                            </div>
+                            <div>
+                                <h3 id="class-name" class="text-xl font-bold text-slate-900 leading-tight">Clear Sky</h3>
+                                <p class="text-xs text-slate-500">Primary Cloud Genus</p>
+                            </div>
+                        </div>
+
+                        <!-- Top Confidence Bar -->
+                        <div class="mb-4">
+                            <div class="flex justify-between text-xs font-medium mb-1">
+                                <span class="text-slate-600">Prediction Probability</span>
+                                <span id="class-confidence" class="font-bold text-brand-blue">96.4%</span>
+                            </div>
+                            <div class="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                                <div id="class-confidence-bar" class="bg-gradient-to-r from-brand-blue to-brand-cyan h-full rounded-full transition-all duration-500" style="width: 96.4%"></div>
+                            </div>
+                        </div>
+
+                        <!-- Top 3 Probability Breakdown -->
+                        <div class="space-y-2 border-t border-slate-100 pt-3 text-xs">
+                            <div class="flex justify-between items-center text-slate-600">
+                                <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-brand-blue"></span><span id="top1-name">Clear Sky</span></span>
+                                <span class="font-mono font-semibold" id="top1-val">96.4%</span>
+                            </div>
+                            <div class="flex justify-between items-center text-slate-500">
+                                <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-slate-300"></span><span id="top2-name">Partly Cloudy</span></span>
+                                <span class="font-mono" id="top2-val">2.8%</span>
+                            </div>
+                            <div class="flex justify-between items-center text-slate-400">
+                                <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-slate-200"></span><span id="top3-name">Overcast</span></span>
+                                <span class="font-mono" id="top3-val">0.8%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CARD 2: CLOUD STATISTICS & OKTAS -->
+                <div class="glass-card rounded-2xl p-5 shadow-soft hover:shadow-soft-hover transition-all duration-300 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Coverage Metrics</span>
+                            <span class="text-xs text-emerald-600 font-semibold flex items-center gap-1">
+                                <i data-lucide="trending-up" class="w-3.5 h-3.5"></i> <span id="val-trend">Increasing</span>
+                            </span>
+                        </div>
+
+                        <!-- Circular Progress & Oktas Scale -->
+                        <div class="grid grid-cols-2 gap-4 items-center my-3">
+                            <!-- Circular Chart -->
+                            <div class="relative w-28 h-28 mx-auto flex items-center justify-center">
+                                <canvas id="coverageDoughnutChart"></canvas>
+                                <div class="absolute inset-0 flex flex-col items-center justify-center text-center">
+                                    <span class="text-lg font-extrabold text-slate-800 leading-none" id="val-coverage-percent">78%</span>
+                                    <span class="text-[10px] text-slate-400 uppercase font-bold mt-0.5">Cover</span>
+                                </div>
+                            </div>
+
+                            <!-- Oktas Horizontal Gauge -->
+                            <div class="space-y-2">
+                                <div>
+                                    <span class="text-xs text-slate-400 block mb-0.5">Oktas Measurement</span>
+                                    <div class="text-2xl font-black text-slate-900 font-mono"><span id="val-oktas">6</span> <span class="text-sm font-normal text-slate-400">/ 8</span></div>
+                                </div>
+                                
+                                <!-- Oktas 8-segment Visual Gauge -->
+                                <div class="grid grid-cols-8 gap-1 pt-1" id="oktas-segments">
+                                    <div class="h-2 rounded-sm bg-brand-blue"></div>
+                                    <div class="h-2 rounded-sm bg-brand-blue"></div>
+                                    <div class="h-2 rounded-sm bg-brand-blue"></div>
+                                    <div class="h-2 rounded-sm bg-brand-blue"></div>
+                                    <div class="h-2 rounded-sm bg-brand-blue"></div>
+                                    <div class="h-2 rounded-sm bg-brand-blue"></div>
+                                    <div class="h-2 rounded-sm bg-slate-200"></div>
+                                    <div class="h-2 rounded-sm bg-slate-200"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Secondary Metrics -->
+                        <div class="grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 text-xs">
+                            <div class="bg-slate-50 p-2 rounded-lg">
+                                <span class="text-slate-400 block">Cloud Density</span>
+                                <span class="font-bold text-slate-700" id="val-density">Medium-High</span>
+                            </div>
+                            <div class="bg-slate-50 p-2 rounded-lg">
+                                <span class="text-slate-400 block">Sky Visibility</span>
+                                <span class="font-bold text-slate-700" id="val-visibility">22%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CARD 3: MODEL PERFORMANCE & SYSTEM HARDWARE -->
+                <div class="glass-card rounded-2xl p-5 shadow-soft hover:shadow-soft-hover transition-all duration-300 flex flex-col justify-between" id="performance-section">
+                    <div>
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Performance Engine</span>
+                            <span class="text-xs font-mono bg-blue-50 text-brand-blue px-2 py-0.5 rounded border border-blue-200">TFLite Runtime</span>
+                        </div>
+
+                        <!-- Engine Model Stats Grid -->
+                        <div class="grid grid-cols-2 gap-2.5 mb-4">
+                            <div class="bg-slate-50 border border-slate-200/60 p-2.5 rounded-xl">
+                                <span class="text-[11px] text-slate-400 block font-medium">UNet TFLite</span>
+                                <div class="text-base font-bold text-slate-800 font-mono mt-0.5">64 <span class="text-xs text-slate-400 font-normal">ms</span></div>
+                                <span class="text-[10px] text-emerald-600 font-semibold">15 FPS Cap</span>
+                            </div>
+                            <div class="bg-slate-50 border border-slate-200/60 p-2.5 rounded-xl">
+                                <span class="text-[11px] text-slate-400 block font-medium">MobileNetV2</span>
+                                <div class="text-base font-bold text-slate-800 font-mono mt-0.5">12 <span class="text-xs text-slate-400 font-normal">ms</span></div>
+                                <span class="text-[10px] text-brand-blue font-semibold">95.2% Acc</span>
+                            </div>
+                        </div>
+
+                        <!-- Hardware Resource Progress Gauges -->
+                        <div class="space-y-2.5">
+                            <div>
+                                <div class="flex justify-between text-xs font-medium mb-1">
+                                    <span class="text-slate-600">Edge CPU Utilization</span>
+                                    <span class="font-mono font-bold text-slate-700" id="val-cpu">34%</span>
+                                </div>
+                                <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                                    <div class="bg-brand-blue h-full rounded-full transition-all duration-500" id="bar-cpu" style="width: 34%"></div>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-xs font-medium mb-1">
+                                    <span class="text-slate-600">RAM Allocation</span>
+                                    <span class="font-mono font-bold text-slate-700" id="val-ram">48%</span>
+                                </div>
+                                <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                                    <div class="bg-brand-cyan h-full rounded-full transition-all duration-500" id="bar-ram" style="width: 48%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- ROW 3: LIVE ANALYTICAL CHARTS -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <!-- Live Line Chart (Cloud Coverage Trend) -->
+                <div class="lg:col-span-8 glass-card rounded-2xl p-5 shadow-soft">
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <h3 class="font-bold text-slate-800 text-sm">Real-Time Cloud Coverage Trend</h3>
+                            <p class="text-xs text-slate-400">Recorded over the last 60 seconds</p>
+                        </div>
+                        <span class="text-xs font-mono bg-slate-100 text-slate-600 px-2 py-1 rounded-md">Live Telemetry</span>
+                    </div>
+                    <div class="h-56 w-full">
+                        <canvas id="liveCoverageChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Live Bar Chart (Classification Confidence Comparison) -->
+                <div class="lg:col-span-4 glass-card rounded-2xl p-5 shadow-soft">
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <h3 class="font-bold text-slate-800 text-sm">Classification Probabilities</h3>
+                            <p class="text-xs text-slate-400">Top predicted categories</p>
+                        </div>
+                    </div>
+                    <div class="h-56 w-full">
+                        <canvas id="confidenceBarChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- RIGHT SIDEBAR: SMART STATUS PANEL -->
+        <aside class="w-72 border-l border-slate-200 bg-white p-5 hidden xl:flex flex-col justify-between shrink-0 space-y-4">
+            <div>
+                <h3 class="font-bold text-slate-800 text-sm uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Smart Status Panel</h3>
+                
+                <div class="space-y-4 text-xs">
+                    <!-- Live Summary Tile -->
+                    <div class="p-3 bg-gradient-to-tr from-blue-50 to-cyan-50 rounded-xl border border-blue-100">
+                        <span class="text-slate-500 block text-[11px]">Current Sky State</span>
+                        <div class="text-base font-bold text-slate-900 mt-0.5" id="side-class-name">Clear Sky</div>
+                        <div class="text-[11px] text-brand-blue font-semibold mt-1" id="side-oktas-desc">6/8 Oktas Coverage</div>
+                    </div>
+
+                    <!-- Detailed Diagnostic Table -->
+                    <div class="space-y-3 font-medium">
+                        <div class="flex justify-between items-center py-1 border-b border-slate-100">
+                            <span class="text-slate-400">Total Cloud Cover</span>
+                            <span class="text-slate-700 font-bold font-mono" id="side-coverage">78%</span>
+                        </div>
+                        <div class="flex justify-between items-center py-1 border-b border-slate-100">
+                            <span class="text-slate-400">Total Oktas</span>
+                            <span class="text-slate-700 font-bold font-mono" id="side-oktas">6 / 8</span>
+                        </div>
+                        <div class="flex justify-between items-center py-1 border-b border-slate-100">
+                            <span class="text-slate-400">UNet Latency</span>
+                            <span class="text-brand-blue font-bold font-mono" id="side-unet-time">64 ms</span>
+                        </div>
+                        <div class="flex justify-between items-center py-1 border-b border-slate-100">
+                            <span class="text-slate-400">ESP32 Connection</span>
+                            <span class="text-emerald-600 font-bold flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Stable
+                            </span>
+                        </div>
+                        <div class="flex justify-between items-center py-1 border-b border-slate-100">
+                            <span class="text-slate-400">Last Frame</span>
+                            <span class="text-slate-600 font-mono" id="side-last-frame">Just now</span>
+                        </div>
+                        <div class="flex justify-between items-center py-1 border-b border-slate-100">
+                            <span class="text-slate-400">Last Prediction</span>
+                            <span class="text-slate-600 font-mono" id="side-last-pred">0.1s ago</span>
+                        </div>
+                        <div class="flex justify-between items-center py-1 border-b border-slate-100">
+                            <span class="text-slate-400">ESP32 Core Temp</span>
+                            <span class="text-slate-700 font-mono">38.4°C</span>
+                        </div>
+                        <div class="flex justify-between items-center py-1">
+                            <span class="text-slate-400">Wi-Fi RSSI</span>
+                            <span class="text-slate-700 font-mono">-64 dBm</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer Meta Info -->
+            <div class="pt-4 border-t border-slate-100 text-[10px] text-slate-400 space-y-1">
+                <div>Developed by <span class="font-semibold text-slate-600">Research Institution</span></div>
+                <div>System Updated: <span class="font-mono">2026-08-02</span></div>
+            </div>
+        </aside>
+
+    </div>
+
+    <!-- FOOTER SYSTEM INFO -->
+    <footer class="bg-white border-t border-slate-200 px-6 py-2.5 text-xs text-slate-500 flex flex-wrap justify-between items-center gap-4">
+        <div class="flex items-center space-x-6">
+            <span>UNet Engine: <strong class="text-slate-700 font-mono">v1.4-tflite</strong></span>
+            <span>MobileNet: <strong class="text-slate-700 font-mono">v2.1-tflite</strong></span>
+            <span>TensorFlow: <strong class="text-slate-700 font-mono">2.15.0</strong></span>
+            <span>FastAPI: <strong class="text-slate-700 font-mono">0.109.0</strong></span>
+        </div>
+        <div class="text-slate-400 text-[11px]">
+            ESP32 Cloud Observation Platform &copy; 2026. All Rights Reserved.
+        </div>
+    </footer>
+
+    <!-- JAVASCRIPT LOGIC & REAL-TIME DASHBOARD UPDATES -->
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        // Real-Time Clock
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('current-time').innerText = now.toLocaleTimeString();
+            document.getElementById('current-date').innerText = now.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+            document.getElementById('video-timestamp').innerText = now.toLocaleTimeString() + '.' + String(now.getMilliseconds()).padStart(3, '0');
+        }
+        setInterval(updateClock, 100);
+
+        // Chart.js 1: Coverage Doughnut Gauge
+        const ctxDoughnut = document.getElementById('coverageDoughnutChart').getContext('2d');
+        const coverageDoughnut = new Chart(ctxDoughnut, {
+            type: 'doughnut',
+            data: {
+                datasets: [{
+                    data: [78, 22],
+                    backgroundColor: ['#2563eb', '#e2e8f0'],
+                    borderWidth: 0,
+                }]
+            },
+            options: {
+                cutout: '80%',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { tooltip: { enabled: false }, legend: { display: false } }
+            }
+        });
+
+        // Chart.js 2: Live Coverage Line Chart
+        const ctxLine = document.getElementById('liveCoverageChart').getContext('2d');
+        const liveCoverageChart = new Chart(ctxLine, {
+            type: 'line',
+            data: {
+                labels: Array.from({length: 20}, (_, i) => `${20 - i}s ago`),
+                datasets: [{
+                    label: 'Cloud Coverage %',
+                    data: [65, 68, 70, 72, 75, 74, 78, 79, 78, 76, 77, 78, 80, 79, 78, 78, 77, 78, 79, 78],
+                    borderColor: '#2563eb',
+                    backgroundColor: 'rgba(37, 99, 235, 0.08)',
+                    borderWidth: 2.5,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+                    y: { min: 0, max: 100, ticks: { font: { size: 10 } } }
+                }
+            }
+        });
+
+        // Chart.js 3: Classification Bar Chart
+        const ctxBar = document.getElementById('confidenceBarChart').getContext('2d');
+        const confidenceBarChart = new Chart(ctxBar, {
+            type: 'bar',
+            data: {
+                labels: ['Clear', 'Partly', 'Overcast', 'Thick'],
+                datasets: [{
+                    data: [96.4, 2.8, 0.8, 0.0],
+                    backgroundColor: ['#2563eb', '#06b6d4', '#cbd5e1', '#cbd5e1'],
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+                    y: { min: 0, max: 100, ticks: { font: { size: 10 } } }
+                }
+            }
+        });
+
+        // Opacity Slider Interaction
+        const opacitySlider = document.getElementById('opacity-slider');
+        const unetStream = document.getElementById('unet-stream');
+        const opacityVal = document.getElementById('opacity-val');
+
+        opacitySlider.addEventListener('input', (e) => {
+            const val = e.target.value;
+            opacityVal.innerText = `${val}%`;
+            unetStream.style.opacity = val / 100;
+        });
+
+        // Weather Icon & Theme Map based on Prediction
+        const weatherThemes = {
+            'Clear Sky': { icon: 'sun-medium', color: 'border-l-brand-blue', bg: 'bg-blue-50', text: 'text-brand-blue' },
+            'Partly Cloudy': { icon: 'cloud-sun', color: 'border-l-brand-cyan', bg: 'bg-cyan-50', text: 'text-brand-cyan' },
+            'Overcast': { icon: 'cloud', color: 'border-l-slate-400', bg: 'bg-slate-100', text: 'text-slate-600' },
+            'Thick Cloud': { icon: 'cloud-rain', color: 'border-l-brand-orange', bg: 'bg-orange-50', text: 'text-brand-orange' },
+        };
+
+        // Real-Time Dashboard Data Poller
+        async function updateDashboardMetrics() {
+            try {
+                // Fetch UNet statistics
+                const unetRes = await fetch('/api/process/unet');
+                if (unetRes.ok) {
+                    const uData = await unetRes.json();
+                    const covPct = (uData.coverage_fraction * 100).toFixed(1);
+                    
+                    document.getElementById('unet-confidence').innerText = `${covPct}%`;
+                    document.getElementById('val-coverage-percent').innerText = `${covPct}%`;
+                    document.getElementById('side-coverage').innerText = `${covPct}%`;
+                    document.getElementById('val-oktas').innerText = uData.oktas;
+                    document.getElementById('side-oktas').innerText = `${uData.oktas} / 8`;
+                    document.getElementById('side-oktas-desc').innerText = `${uData.oktas}/8 Oktas Coverage`;
+
+                    // Update Doughnut & Live Chart
+                    coverageDoughnut.data.datasets[0].data = [covPct, 100 - covPct];
+                    coverageDoughnut.update();
+
+                    liveCoverageChart.data.datasets[0].data.shift();
+                    liveCoverageChart.data.datasets[0].data.push(covPct);
+                    liveCoverageChart.update();
+
+                    // Update Oktas Segment Visualizer
+                    const activeOktas = Math.min(8, Math.round(uData.oktas));
+                    const segContainer = document.getElementById('oktas-segments');
+                    segContainer.innerHTML = '';
+                    for (let i = 0; i < 8; i++) {
+                        const seg = document.createElement('div');
+                        seg.className = `h-2 rounded-sm ${i < activeOktas ? 'bg-brand-blue' : 'bg-slate-200'}`;
+                        segContainer.appendChild(seg);
+                    }
+                }
+
+                // Fetch MobileNet Classification statistics
+                const mRes = await fetch('/api/process/mobilenet');
+                if (mRes.ok) {
+                    const mData = await mRes.json();
+                    const className = mData.predicted_class.split(' ')[0] || 'Clear Sky';
+                    
+                    document.getElementById('class-name').innerText = mData.predicted_class;
+                    document.getElementById('side-class-name').innerText = mData.predicted_class;
+                    document.getElementById('top1-name').innerText = className;
+
+                    // Dynamic Theme Switcher for MobileNet Card
+                    const theme = weatherThemes[className] || weatherThemes['Clear Sky'];
+                    const card = document.getElementById('mobilenet-card');
+                    card.className = `glass-card rounded-2xl p-5 shadow-soft hover:shadow-soft-hover transition-all duration-300 border-l-4 ${theme.color} flex flex-col justify-between`;
+                    
+                    const iconContainer = document.getElementById('class-icon-container');
+                    iconContainer.className = `p-3.5 ${theme.bg} ${theme.text} rounded-2xl transition-all duration-300`;
+                }
+
+            } catch (err) {
+                console.warn("Backend metrics polling error:", err);
+            }
+        }
+
+        // Poll every 1 second
+        setInterval(updateDashboardMetrics, 1000);
+        updateDashboardMetrics();
+    </script>
+</body>
+</html> 

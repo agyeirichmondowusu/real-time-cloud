@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-08-12T09:21:29.283486",
+  "predictions": [
+    {
+      "type": "Cirrus",
+      "category": "high",
+      "confidence": 37.2
+    },
+    {
+      "type": "Stratus",
+      "category": "low",
+      "confidence": 16.1
+    },
+    {
+      "type": "Clear Sky",
+      "category": "clear",
+      "confidence": 15.7
+    }
+  ],
+  "saved_image": "frame_20260812_092129_Cirrus_37-Stratus_16-Clear_Sky_16.jpg"
+}

@@ -1,0 +1,690 @@
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>All-Sky ESP32 Cloud Vision Observatory</title>
+  <style>
+    :root {
+      --bg-dark: #090c10;
+      --panel-bg: rgba(18, 26, 36, 0.75);
+      --panel-border: rgba(0, 210, 255, 0.2);
+      --accent-cyan: #00f0ff;
+      --accent-blue: #0077ff;
+      --accent-purple: #7000ff;
+      --accent-green: #00ff88;
+      --accent-orange: #ff9900;
+      --text-main: #e6f1ff;
+      --text-muted: #8892b0;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(circle at 50% 50%, rgba(0, 119, 255, 0.08) 0%, transparent 70%),
+        radial-gradient(circle at 20% 20%, rgba(112, 0, 255, 0.05) 0%, transparent 50%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+    }
+
+    /* Header Navigation */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 15px 25px;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      backdrop-filter: blur(12px);
+      margin-bottom: 25px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: conic-gradient(from 0deg, var(--accent-cyan), var(--accent-purple), var(--accent-cyan));
+      animation: rotate 8s linear infinite;
+    }
+
+    @keyframes rotate {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .brand h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      padding: 6px 14px;
+      border-radius: 20px;
+      background: rgba(0, 255, 136, 0.1);
+      border: 1px solid rgba(0, 255, 136, 0.3);
+      color: var(--accent-green);
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      background-color: var(--accent-green);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--accent-green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* Config Bar */
+    .stream-config {
+      display: flex;
+      gap: 15px;
+      margin-bottom: 25px;
+      flex-wrap: wrap;
+    }
+
+    .input-group {
+      flex: 1;
+      min-width: 240px;
+      display: flex;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .input-group label {
+      padding: 10px 15px;
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      border-right: 1px solid var(--panel-border);
+    }
+
+    .input-group input, .input-group select {
+      flex: 1;
+      background: transparent;
+      border: none;
+      padding: 10px 15px;
+      color: var(--text-main);
+      font-size: 0.9rem;
+      outline: none;
+    }
+
+    .input-group select option {
+      background-color: #0f172a;
+      color: var(--text-main);
+    }
+
+    .btn {
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+      color: white;
+      border: none;
+      padding: 10px 24px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(0, 119, 255, 0.3);
+    }
+
+    .btn:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+
+    /* Spherical 2-Grid Display */
+    .spherical-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 30px;
+      justify-items: center;
+      align-items: center;
+      margin-bottom: 25px;
+    }
+
+    .viewport-card {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 50%;
+      padding: 12px;
+      position: relative;
+      width: 100%;
+      max-width: 440px;
+      aspect-ratio: 1 / 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      box-shadow: 
+        0 0 30px rgba(0, 240, 255, 0.08),
+        inset 0 0 15px rgba(0, 0, 0, 0.8);
+      transition: transform 0.3s ease;
+    }
+
+    .viewport-card::before {
+      content: '';
+      position: absolute;
+      inset: -4px;
+      border-radius: 50%;
+      padding: 4px;
+      background: linear-gradient(145deg, var(--accent-cyan), transparent 60%, var(--accent-purple));
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+    }
+
+    /* Spherical Clip Container */
+    .spherical-frame {
+      width: 94%;
+      height: 94%;
+      border-radius: 50%;
+      overflow: hidden;
+      position: relative;
+      background: #020408;
+      box-shadow: inset 0 0 25px rgba(0,0,0,0.9);
+    }
+
+    .spherical-frame canvas, .spherical-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    /* Fisheye Radial Overlay Reticle */
+    .lens-reticle {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      border: 1px dashed rgba(0, 240, 255, 0.3);
+      pointer-events: none;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .lens-reticle::before {
+      content: '';
+      position: absolute;
+      width: 66%;
+      height: 66%;
+      border-radius: 50%;
+      border: 1px rgba(0, 240, 255, 0.2) solid;
+    }
+
+    .lens-reticle::after {
+      content: '';
+      position: absolute;
+      width: 33%;
+      height: 33%;
+      border-radius: 50%;
+      border: 1px rgba(0, 240, 255, 0.2) solid;
+    }
+
+    .viewport-label {
+      position: absolute;
+      bottom: 25px;
+      background: rgba(9, 12, 16, 0.85);
+      border: 1px solid var(--panel-border);
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 1px;
+      color: var(--accent-cyan);
+      backdrop-filter: blur(8px);
+      z-index: 10;
+    }
+
+    /* Model Analytics & Telemetry Section */
+    .dashboard-panel {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+    }
+
+    .panel-card {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      padding: 20px;
+      backdrop-filter: blur(12px);
+    }
+
+    .panel-card h3 {
+      font-size: 0.95rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 15px;
+    }
+
+    .metric-box {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .metric-box .title {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-bottom: 5px;
+    }
+
+    .metric-box .value {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--accent-cyan);
+    }
+
+    /* Segmentation Class Legend */
+    .class-legend {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .class-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.85rem;
+    }
+
+    .class-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .class-color {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+    }
+
+    .progress-bg {
+      width: 100px;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.5s ease;
+    }
+
+    /* Console Log */
+    .console-log {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 0.75rem;
+      color: var(--accent-green);
+      background: rgba(0, 0, 0, 0.5);
+      border-radius: 8px;
+      padding: 10px;
+      height: 110px;
+      overflow-y: auto;
+      border: 1px solid rgba(0, 255, 136, 0.15);
+    }
+
+    .log-line {
+      margin-bottom: 4px;
+      opacity: 0.85;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon"></div>
+      <h1>Spherical Sky Observatory</h1>
+    </div>
+    <div class="status-badge">
+      <div class="dot"></div>
+      <span id="system-status">ESP32 STREAM LIVE</span>
+    </div>
+  </header>
+
+  <!-- Controls Bar -->
+  <div class="stream-config">
+    <div class="input-group">
+      <label for="esp-url">ESP32 Endpoint</label>
+      <input type="text" id="esp-url" value="http://192.168.1.100:81/stream" placeholder="http://<ESP32_IP>/stream">
+    </div>
+
+    <div class="input-group">
+      <label for="model-select">Segmentation Model</label>
+      <select id="model-select">
+        <option value="unet">UNet-Lite (Cloud Cover & Types)</option>
+        <option value="cloudnet">CloudNet-Tiny (High Efficiency)</option>
+        <option value="deeplab">DeepLabV3+ Edge (Multi-Class Sky Mask)</option>
+        <option value="fomo">EdgeImpulse FOMO (Cloud Clusters)</option>
+      </select>
+    </div>
+
+    <button class="btn" onclick="toggleStreamSource()">Reconnect Stream</button>
+  </div>
+
+  <!-- Spherical 2-Grid Display -->
+  <main class="spherical-grid">
+    
+    <!-- Original Fisheye Feed Card -->
+    <div class="viewport-card">
+      <div class="spherical-frame">
+        <canvas id="raw-canvas" width="400" height="400"></canvas>
+        <div class="lens-reticle"></div>
+      </div>
+      <div class="viewport-label">ORIGINAL RAW FEED (ESP32-CAM)</div>
+    </div>
+
+    <!-- Segmentation Mask Feed Card -->
+    <div class="viewport-card">
+      <div class="spherical-frame">
+        <canvas id="segment-canvas" width="400" height="400"></canvas>
+        <div class="lens-reticle"></div>
+      </div>
+      <div class="viewport-label">MODEL SEGMENTATION MASK</div>
+    </div>
+
+  </main>
+
+  <!-- Telemetry and Model Outputs -->
+  <footer class="dashboard-panel">
+    
+    <!-- Telemetry Box -->
+    <div class="panel-card">
+      <h3>Stream Telemetry <span>ESP32-S3</span></h3>
+      <div class="metric-grid">
+        <div class="metric-box">
+          <div class="title">Resolution</div>
+          <div class="value" id="val-res">400 x 400</div>
+        </div>
+        <div class="metric-box">
+          <div class="title">Stream FPS</div>
+          <div class="value" id="val-fps">24.8</div>
+        </div>
+        <div class="metric-box">
+          <div class="title">Inference Latency</div>
+          <div class="value" id="val-latency">42 ms</div>
+        </div>
+        <div class="metric-box">
+          <div class="title">Cloud Cover (OKTA)</div>
+          <div class="value" id="val-okta">5 / 8</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Model Outputs & Classification -->
+    <div class="panel-card">
+      <h3>Model Class Breakdown <span id="model-badge">UNet-Lite</span></h3>
+      <ul class="class-legend">
+        <li class="class-item">
+          <div class="class-info">
+            <div class="class-color" style="background: #0077ff;"></div>
+            <span>Clear Sky / Blue Sky</span>
+          </div>
+          <div class="class-info">
+            <span id="pct-sky">35%</span>
+            <div class="progress-bg"><div class="progress-fill" id="bar-sky" style="width: 35%; background: #0077ff;"></div></div>
+          </div>
+        </li>
+        <li class="class-item">
+          <div class="class-info">
+            <div class="class-color" style="background: #ffffff;"></div>
+            <span>Cumulus (Thick Low Cloud)</span>
+          </div>
+          <div class="class-info">
+            <span id="pct-cumulus">42%</span>
+            <div class="progress-bg"><div class="progress-fill" id="bar-cumulus" style="width: 42%; background: #ffffff;"></div></div>
+          </div>
+        </li>
+        <li class="class-item">
+          <div class="class-info">
+            <div class="class-color" style="background: #00f0ff;"></div>
+            <span>Cirrus (Thin High Cloud)</span>
+          </div>
+          <div class="class-info">
+            <span id="pct-cirrus">18%</span>
+            <div class="progress-bg"><div class="progress-fill" id="bar-cirrus" style="width: 18%; background: #00f0ff;"></div></div>
+          </div>
+        </li>
+        <li class="class-item">
+          <div class="class-info">
+            <div class="class-color" style="background: #7000ff;"></div>
+            <span>Stratus / Obscuration</span>
+          </div>
+          <div class="class-info">
+            <span id="pct-stratus">5%</span>
+            <div class="progress-bg"><div class="progress-fill" id="bar-stratus" style="width: 5%; background: #7000ff;"></div></div>
+          </div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Real-time Console Logs -->
+    <div class="panel-card">
+      <h3>Inference Log Console</h3>
+      <div class="console-log" id="console-log">
+        <div class="log-line">[SYS] Initializing WebGL/Canvas rendering pipeline...</div>
+        <div class="log-line">[NET] Listening on socket stream...</div>
+      </div>
+    </div>
+
+  </footer>
+
+  <script>
+    // Canvas contexts
+    const rawCanvas = document.getElementById('raw-canvas');
+    const segCanvas = document.getElementById('segment-canvas');
+    const rawCtx = rawCanvas.getContext('2d');
+    const segCtx = segCanvas.getContext('2d');
+
+    const consoleLog = document.getElementById('console-log');
+    const modelSelect = document.getElementById('model-select');
+    const modelBadge = document.getElementById('model-badge');
+
+    let animationId = null;
+    let angle = 0;
+
+    // Log Helper
+    function log(msg) {
+      const time = new Date().toISOString().substring(11, 19);
+      const line = document.createElement('div');
+      line.className = 'log-line';
+      line.textContent = `[${time}] ${msg}`;
+      consoleLog.appendChild(line);
+      consoleLog.scrollTop = consoleLog.scrollHeight;
+    }
+
+    // Model Selector Event Listener
+    modelSelect.addEventListener('change', (e) => {
+      const selectedModelName = e.target.options[e.target.selectedIndex].text.split(' ')[0];
+      modelBadge.textContent = selectedModelName;
+      log(`Model architecture switched to: ${e.target.value.toUpperCase()}`);
+    });
+
+    // Synthetic Fisheye Sky & Segmentation Generator
+    // (Used for demo/offline preview - smoothly simulates an ESP32 sky stream)
+    function renderSimulatedStreams() {
+      const width = rawCanvas.width;
+      const height = rawCanvas.height;
+      const radius = width / 2;
+      const centerX = width / 2;
+      const centerY = height / 2;
+
+      angle += 0.01;
+
+      // --- 1. Render Raw Spherical Sky ---
+      // Sky Background
+      const skyGrad = rawCtx.createRadialGradient(centerX, centerY, 10, centerX, centerY, radius);
+      skyGrad.addColorStop(0, '#1a4f8b');
+      skyGrad.addColorStop(0.7, '#0d2b4e');
+      skyGrad.addColorStop(1, '#05101e');
+      rawCtx.fillStyle = skyGrad;
+      rawCtx.fillRect(0, 0, width, height);
+
+      // Draw Synthetic Fisheye Sun
+      const sunX = centerX + Math.cos(angle * 0.5) * 60;
+      const sunY = centerY + Math.sin(angle * 0.5) * 40;
+      rawCtx.fillStyle = '#fff7d1';
+      rawCtx.beginPath();
+      rawCtx.arc(sunX, sunY, 16, 0, Math.PI * 2);
+      rawCtx.fill();
+
+      // Draw Synthetic Cloud Formations
+      rawCtx.fillStyle = 'rgba(245, 247, 250, 0.75)';
+      drawCloudShape(rawCtx, centerX - 30 + Math.sin(angle) * 20, centerY - 40, 60);
+      drawCloudShape(rawCtx, centerX + 50 + Math.cos(angle) * 15, centerY + 30, 80);
+
+      // Lens Vignette Mask
+      applyCircularMask(rawCtx, width, height, radius);
+
+      // --- 2. Render Corresponding Model Segmentation Mask ---
+      // Sky Base Mask (Blue)
+      segCtx.fillStyle = '#0b192c';
+      segCtx.fillRect(0, 0, width, height);
+      
+      const maskGrad = segCtx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);
+      maskGrad.addColorStop(0, '#0055ff');
+      maskGrad.addColorStop(1, '#002b80');
+      segCtx.fillStyle = maskGrad;
+      segCtx.beginPath();
+      segCtx.arc(centerX, centerY, radius - 4, 0, Math.PI * 2);
+      segCtx.fill();
+
+      // Sun / Glare Mask (Orange Class)
+      segCtx.fillStyle = '#ff9900';
+      segCtx.beginPath();
+      segCtx.arc(sunX, sunY, 20, 0, Math.PI * 2);
+      segCtx.fill();
+
+      // Cumulus Mask (White Class)
+      segCtx.fillStyle = '#ffffff';
+      drawCloudShape(segCtx, centerX - 30 + Math.sin(angle) * 20, centerY - 40, 64);
+
+      // Cirrus Mask (Cyan Class)
+      segCtx.fillStyle = '#00f0ff';
+      drawCloudShape(segCtx, centerX + 50 + Math.cos(angle) * 15, centerY + 30, 85);
+
+      // Lens Vignette Mask
+      applyCircularMask(segCtx, width, height, radius);
+
+      // Update Dynamic Telemetry Values
+      updateTelemetry();
+
+      animationId = requestAnimationFrame(renderSimulatedStreams);
+    }
+
+    function drawCloudShape(ctx, x, y, size) {
+      ctx.beginPath();
+      ctx.arc(x, y, size * 0.5, 0, Math.PI * 2);
+      ctx.arc(x + size * 0.3, y - size * 0.2, size * 0.4, 0, Math.PI * 2);
+      ctx.arc(x + size * 0.5, y + size * 0.1, size * 0.35, 0, Math.PI * 2);
+      ctx.arc(x - size * 0.3, y + size * 0.1, size * 0.3, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function applyCircularMask(ctx, width, height, radius) {
+      ctx.globalCompositeOperation = 'destination-in';
+      ctx.beginPath();
+      ctx.arc(width / 2, height / 2, radius - 2, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    // Telemetry updates simulation
+    function updateTelemetry() {
+      const fps = (23.5 + Math.random() * 2).toFixed(1);
+      const latency = Math.floor(38 + Math.random() * 8);
+      document.getElementById('val-fps').textContent = fps;
+      document.getElementById('val-latency').textContent = `${latency} ms`;
+
+      // Fluctuate cloud percentages slightly
+      const cumulus = Math.floor(40 + Math.sin(angle) * 5);
+      const cirrus = Math.floor(18 + Math.cos(angle) * 3);
+      const sky = 100 - cumulus - cirrus - 5;
+
+      document.getElementById('pct-sky').textContent = `${sky}%`;
+      document.getElementById('bar-sky').style.width = `${sky}%`;
+
+      document.getElementById('pct-cumulus').textContent = `${cumulus}%`;
+      document.getElementById('bar-cumulus').style.width = `${cumulus}%`;
+
+      document.getElementById('pct-cirrus').textContent = `${cirrus}%`;
+      document.getElementById('bar-cirrus').style.width = `${cirrus}%`;
+    }
+
+    // Stream reconnect logic
+    function toggleStreamSource() {
+      const url = document.getElementById('esp-url').value;
+      log(`Attempting connection to ESP32 stream at: ${url}`);
+      
+      // If live ESP32 URL is accessible, replace canvas stream with Image/MJPEG stream element
+      const img = new Image();
+      img.crossOrigin = "Anonymous";
+      img.src = url;
+
+      img.onload = () => {
+        log(`Successfully connected to ESP32-CAM MJPEG stream.`);
+        document.getElementById('system-status').textContent = "ESP32 HARDWARE CONNECTED";
+      };
+
+      img.onerror = () => {
+        log(`Could not reach ${url}. Falling back to high-fidelity simulated fisheye stream.`);
+      };
+    }
+
+    // Initialize system
+    log("System initialized. Render engine running.");
+    renderSimulatedStreams();
+  </script>
+</body>
+</html>

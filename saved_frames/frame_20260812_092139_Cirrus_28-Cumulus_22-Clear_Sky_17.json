@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-08-12T09:21:39.287479",
+  "predictions": [
+    {
+      "type": "Cirrus",
+      "category": "high",
+      "confidence": 28.3
+    },
+    {
+      "type": "Cumulus",
+      "category": "low",
+      "confidence": 22.5
+    },
+    {
+      "type": "Clear Sky",
+      "category": "clear",
+      "confidence": 16.7
+    }
+  ],
+  "saved_image": "frame_20260812_092139_Cirrus_28-Cumulus_22-Clear_Sky_17.jpg"
+}
